@@ -1,0 +1,20 @@
+15:43:05  === run start, budget 900s, dry=False ===
+15:43:05  persona: casual (speed 1.00)
+15:43:05  plan: spreadsheet > office > web, AFK after block 1 (42s)
+15:43:08  BLOCK office: spreadsheet
+15:45:44  spreadsheet result: {'scenario': 'office.write_spreadsheet', 'ok': True, 'error': None, 'sheet_type': 'budget', 'filename': 'Budget.ods', 'path': 'C:\\Users\\User\\Documents\\Budget.ods', 'bytes': 11651, 'rows': 6, 'typos': 0, 'saves': 5, 'verified': True, 'verify_note': 'all 6 rows, formulas and the SUM match', 'revised': True, 'bold_header_done': True, 'bold_header_verified': True, 'duration_s': 155.8, 'dialogs': [], 'log': ['[office 15:43:08] launching Calc via engine.launch (Win+R)', '[office 15:43:41] sheet=budget file=Budget.ods planned rows=6', '[office 15:44:08] saved as Budget.ods', '[office 15:45:29] revising Equipment hire quantity 1 -> 2', '[office 15:45:41] verified on disk: C:\\Users\\User\\Documents\\Budget.ods (11651 bytes); read-back OK: all 6 rows, formulas and the SUM match']}
+15:45:44  block spreadsheet took 156s
+15:45:44  AFK 42s
+15:46:26  BLOCK office: write document
+15:48:57  office result: {'scenario': 'office.write_document', 'ok': True, 'error': None, 'left_open': False, 'doc_type': 'report', 'filename': 'Weekly_Report_v2.odt', 'path': 'C:\\Users\\User\\Documents\\Weekly_Report_v2.odt', 'bytes': 10803, 'typos': 1, 'saves': 2, 'paragraphs': 2, 'duration_s': 151.0, 'dialogs': [], 'log': ['[office 15:46:26] launching Writer via engine.launch (Win+R)', '[office 15:46:55] doc=report file=Weekly_Report_v2.odt paragraphs=4', '[office 15:47:50] saved as Weekly_Report_v2.odt', '[office 15:48:48] time budget: not enough left for paragraph 3; wrapping up', '[office 15:48:52] verified on disk: C:\\Users\\User\\Documents\\Weekly_Report_v2.odt (10803 bytes)']}
+15:48:57  block office took 151s
+15:48:57  idle 11s
+15:49:08  BLOCK web: 2 site(s)
+15:53:31  web result: {'ok': True, 'secs': 262, 'planned': 2, 'visited': 2, 'saved': 'https://www.coinbase.com/', 'log': [{'url': 'https://www.coursera.org/', 'secs': 128, 'actions': ['scroll', 'scroll', 'scroll', 'scroll', 'scroll', 'link', 'find'], 'cert': False}, {'url': 'https://www.coinbase.com/', 'secs': 101, 'actions': ['scroll', 'scroll', 'scroll', 'scroll', 'scroll', 'save-page'], 'cert': False}], 'tabs': 1}
+15:53:31  block web took 262s
+15:53:31  idle 56s
+15:54:27  BLOCK web: 1 site(s)
+15:56:54  web result: {'ok': True, 'secs': 147, 'planned': 1, 'visited': 1, 'saved': None, 'log': [{'url': 'https://www.amazon.com/', 'secs': 127, 'actions': ['scroll', 'scroll', 'scroll', 'scroll', 'scroll', 'find'], 'cert': False}], 'tabs': 1}
+15:56:54  block web took 147s
+15:56:54  tail idle 74s
+15:58:08  === run end, elapsed 900s ===
