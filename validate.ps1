@@ -237,7 +237,7 @@ if ($bins.Count -gt 0) {
 }
 
 # ---------------------------------------------------------------- CHECK 2: bad parents
-$badParents = @('python.exe', 'pythonw.exe', 'py.exe', 'cmd.exe', 'powershell.exe', 'pwsh.exe', 'wscript.exe', 'cscript.exe')
+$badParents = @('python.exe', 'pythonw.exe', 'py.exe', 'pyw.exe', 'cmd.exe', 'powershell.exe', 'pwsh.exe', 'wscript.exe', 'cscript.exe')
 # Scope: only the AGENT's apps count. Anything else in the window that has a script/shell
 # parent (monitor.ps1, wevtutil, validate.ps1 itself, the python launcher, conhost...) is
 # tooling around the run, not the agent, and must not fail the check.
@@ -302,7 +302,7 @@ if ($allMain.Count -gt 0) {
 }
 
 # ---------------------------------------------------------------- CHECK 5: project-folder trace
-$traceImgsSkip = @('python.exe', 'pythonw.exe', 'py.exe', 'cmd.exe', 'powershell.exe', 'pwsh.exe', 'conhost.exe')
+$traceImgsSkip = @('python.exe', 'pythonw.exe', 'py.exe', 'pyw.exe', 'cmd.exe', 'powershell.exe', 'pwsh.exe', 'conhost.exe')
 $trace = @($procs | Where-Object {
     $_.ImgName -notin $traceImgsSkip -and
     ($_.CommandLine -match 'synth\w*-agent|\.py\b|\.pyw\b' -or $_.CurrentDirectory -match 'synth\w*-agent') })   # matches synthetic-agent AND the real folder name synthentic-agent
