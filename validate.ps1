@@ -7,7 +7,8 @@
   22 DNS query) for one agent run and checks it against the guardrails in
   MASTER_BUILD_PLAN.md:
 
-    1. Every app launch has ParentImage = explorer.exe (Chrome, Writer, Notepad)
+    1. Every app launch has ParentImage = explorer.exe (Chrome, Writer, Notepad); Writer/Calc
+       from the Start menu may go explorer.exe -> swriter.exe/scalc.exe -> soffice.exe (PASS)
     2. No process is parented by python / cmd / powershell / wscript ...
     3. Cold-launch discipline: each app fully closed before it is launched again
     4. Every launched app was closed again (and nothing is left running)
@@ -195,9 +196,10 @@ foreach ($f in $families) {
     $L = $famLaunches[$f.Name]
     if ($L.Count -eq 0) { continue }
     $bad = @($L | Where-Object { $_.ParName -ne 'explorer.exe' })
-    # A document opened by double-click / Enter in File Explorer goes through the OpenOffice
-    # launcher stub: explorer.exe -> swriter.exe (scalc.exe ...) -> soffice.exe.  Tell that
-    # apart from a real bad parent.
+    # Opening Writer/Calc from the Start menu (what the agent does now) or a document from
+    # File Explorer goes through the office launcher stub:
+    # explorer.exe -> swriter.exe (scalc.exe ...) -> soffice.exe.  That is exactly what a
+    # person's launch looks like, so it passes; only a non-explorer stub parent is bad.
     $viaAssoc = @()
     $hard = @()
     foreach ($b in $bad) {
@@ -212,7 +214,7 @@ foreach ($f in $families) {
     if ($bad.Count -eq 0) {
         Add-Check "Explorer parent: $($f.Name)" 'PASS' ("{0}/{0} launches have ParentImage = explorer.exe" -f $L.Count)
     } elseif ($hard.Count -eq 0) {
-        Add-Check "Explorer parent: $($f.Name)" 'WARN' ("{0}/{1} launches went explorer.exe -> {2} -> soffice.exe (opened from File Explorer via the file association: explorer.exe is the grandparent, not the direct parent)" -f $viaAssoc.Count, $L.Count, $script:assocStub)
+        Add-Check "Explorer parent: $($f.Name)" 'PASS' ("{0}/{1} launches went explorer.exe -> {2} -> soffice.exe (Start menu / File Explorer launcher stub, started by explorer.exe){3}" -f $viaAssoc.Count, $L.Count, $script:assocStub, $(if ($viaAssoc.Count -lt $L.Count) { "; the rest direct from explorer.exe" } else { "" }))
     } else {
         $who = ($hard | ForEach-Object { $_.ParName } | Sort-Object -Unique) -join ', '
         Add-Check "Explorer parent: $($f.Name)" 'FAIL' ("{0}/{1} launches NOT from explorer.exe (parents: {2})" -f $hard.Count, $L.Count, $who)

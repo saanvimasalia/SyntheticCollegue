@@ -24,9 +24,10 @@ MIN_NEED = {"web": 130, "office": 150, "spreadsheet": 200}    # least time a blo
 TARGET = {"web": 330, "office": 230, "spreadsheet": 200}      # time a block is aimed at
                              # (web: the block gets TARGET+20 s and runs int((that-30)/SEC_PER_SITE)
                              #  sites, so 330 is the least that allows 2 sites at 150 s each)
-WEB_SITES = (2, 2)           # guarantee mode: sites per web session (min, max).
-                             # 2 sites ~ 260-340 s with the current web.py dwells. Go to (3, 3)
-                             # (and TARGET["web"] ~ 420) only after web.py's dwells are retuned.
+WEB_SITES = (1, 2)           # guarantee mode: sites per web session (min, max).
+                             # The web block now ends with web.research_to_notepad (search ->
+                             # copy into Notepad -> tidy up, ~170 s), so with TARGET 330 only
+                             # 1 site fits; a 2nd is visited only when the block gets more time.
 AFK_RANGE = (40.0, 90.0)     # the one forced AFK gap (seconds)
 IDLE_GAP_S = 25              # allowance reserved per idle gap between blocks
 SPREAD_SLACK = False         # True = lengthen idle gaps to absorb leftover time. Off by default:
@@ -143,7 +144,8 @@ def _idle(dry, remaining):
 
 def _run_web(remaining, dry):
     lo, hi = WEB_SITES if GUARANTEE else (1, 3)
-    n = max(1, min(random.randint(lo, hi), int((remaining - 30) / SEC_PER_SITE)))
+    research_s = web.RESEARCH_EST_S if getattr(web, "RESEARCH", False) else 0
+    n = max(1, min(random.randint(lo, hi), int((remaining - 30 - research_s) / SEC_PER_SITE)))
     log("BLOCK web: %d site(s)" % n)
     if dry:
         _advance(min(n * SEC_PER_SITE * random.uniform(0.8, 1.3), remaining))

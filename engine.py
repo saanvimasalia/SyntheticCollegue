@@ -38,11 +38,12 @@ _EXTENDED = {0x5B, 0x2E, 0x25, 0x26, 0x27, 0x28, 0x24, 0x23, 0x21, 0x22}
 # ---------- timing ----------
 # kind: (median s, sigma, min s, max s)
 _PARAMS = {"keystroke": (0.13, 0.40, 0.04, 1.0),
-           "action":    (1.2, 0.60, 0.3, 12.0),
+           "action":    (1.6, 0.60, 0.4, 12.0),
            "read":      (9.0, 0.60, 2.0, 60.0),
            "scroll":    (0.8, 0.50, 0.2, 6.0),
            "think":     (2.2, 0.35, 1.2, 6.0),
-           "notice":    (0.5, 0.35, 0.3, 1.5)}
+           "notice":    (0.5, 0.35, 0.3, 1.5),
+           "pause":     (6.0, 0.60, 2.5, 25.0)}   # stops between steps (look away, reread)
 SPEED = 1.0                      # set per run by the sequencer (persona)
 def _sample(kind):
     med, sig, lo, hi = _PARAMS[kind]
@@ -54,6 +55,12 @@ def human_delay(kind):
     d = _sample(kind)
     time.sleep(d)
     return d
+
+def maybe_pause(p=0.2):
+    """Now and then a person stops between steps for a few seconds."""
+    if random.random() < p:
+        return human_delay("pause")
+    return 0.0
 
 def _hold():   # how long a key stays pressed
     return min(0.2, max(0.025, random.lognormvariate(math.log(0.07), 0.3)))
@@ -117,10 +124,57 @@ def type_text(text):
         human_delay("keystroke")
         if ch == " ":
             time.sleep(random.uniform(0.02, 0.12))
+            if random.random() < 0.10:     # words come out in bursts
+                time.sleep(random.uniform(0.3, 1.1))
         elif ch in ".,;:!?\n":
             time.sleep(min(2.0, random.lognormvariate(math.log(0.35), 0.5)))
         if random.random() < 1 / 40:       # occasional thinking pause
             time.sleep(min(6.0, max(1.2, random.lognormvariate(math.log(2.2), 0.35))))
+
+# ---------- typing with typos ----------
+_ROWS = ["qwertyuiop", "asdfghjkl", "zxcvbnm"]
+TYPO_RATE = 0.03                    # chance per letter of hitting a neighbouring key
+
+def _neighbors(ch):
+    c = ch.lower()
+    for r, row in enumerate(_ROWS):
+        if c in row:
+            i = row.index(c)
+            out = [row[j] for j in (i - 1, i + 1) if 0 <= j < len(row)]
+            out += [_ROWS[rr][i] for rr in (r - 1, r + 1)
+                    if 0 <= rr < len(_ROWS) and i < len(_ROWS[rr])]
+            return out
+    return []
+
+def type_human(text, typo_rate=None):
+    """type_text, but now and then a neighbouring key gets hit; the slip is noticed
+    0-2 letters later and backspaced away. The final text is always `text`.
+    Returns the number of typos made."""
+    rate = TYPO_RATE if typo_rate is None else typo_rate
+    typos = 0
+    for i, ch in enumerate(text):
+        nb = _neighbors(ch) if ch.isalpha() else []
+        if nb and i > 0 and random.random() < rate:
+            wrong = random.choice(nb)
+            wrong = wrong.upper() if ch.isupper() else wrong
+            ahead = text[i + 1:i + 1 + random.choice([0, 0, 1, 2])]
+            ahead = ahead.split("\n")[0].split("\t")[0]
+            type_text(wrong + ahead)
+            human_delay("notice")              # "wait, that's wrong"
+            for _ in range(1 + len(ahead)):
+                press("backspace")
+                human_delay("keystroke")
+            typos += 1
+        type_text(ch)
+    return typos
+
+def retype_word(word, alternative):
+    """Type a word, think better of it, Ctrl+Backspace it, type another one."""
+    type_human(word)
+    human_delay("think")
+    press("ctrl", "backspace")
+    human_delay("keystroke")
+    type_human(alternative)
 
 # ---------- still stubs ----------
 # ---------- window waiting + launch ----------
@@ -154,11 +208,85 @@ def launch(path, args=None):
         args = " ".join(args)
     cmd = path if not args else path + " " + args
     press("win", "r")
-    wait_for_window("Run", 5, exact=True)
+    if not wait_for_window("Run", 5, exact=True):
+        # never type a command into whatever else is in front
+        raise RuntimeError("Run dialog did not open (front: %r)" % _foreground_title())
     human_delay("action")
     type_text(cmd)
     human_delay("action")
     press("enter")
+
+LAUNCH_VIA_START = True     # False = always Win+R with the full path (old behaviour)
+
+# processes that own the Start menu / its search box (Win10 and Win11)
+_START_EXES = {"startmenuexperiencehost.exe", "searchapp.exe", "searchhost.exe",
+               "searchui.exe", "shellexperiencehost.exe"}
+_kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+_kernel32.OpenProcess.restype = wintypes.HANDLE
+_kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+_kernel32.QueryFullProcessImageNameW.argtypes = [wintypes.HANDLE, wintypes.DWORD,
+                                                 wintypes.LPWSTR, ctypes.POINTER(wintypes.DWORD)]
+_kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+
+def _foreground_exe():
+    """Exe name of the process that owns the front window ('' if unknown).
+    ctypes only: no child process."""
+    pid = wintypes.DWORD()
+    user32.GetWindowThreadProcessId(user32.GetForegroundWindow(), ctypes.byref(pid))
+    h = _kernel32.OpenProcess(0x1000, False, pid.value)    # QUERY_LIMITED_INFORMATION
+    if not h:
+        return ""
+    try:
+        buf = ctypes.create_unicode_buffer(520)
+        n = wintypes.DWORD(520)
+        if _kernel32.QueryFullProcessImageNameW(h, 0, buf, ctypes.byref(n)):
+            return os.path.basename(buf.value).lower()
+        return ""
+    finally:
+        _kernel32.CloseHandle(h)
+
+def _start_menu_open(timeout=3.0):
+    end = time.monotonic() + timeout
+    while time.monotonic() < end:
+        if _foreground_exe() in _START_EXES:
+            return True
+        time.sleep(random.uniform(0.1, 0.25))
+    return False
+
+def open_app(search, expect=None, fallback=None, fallback_args=None, timeout=25):
+    """Open an app the way most people do: tap Win, type part of its name, glance
+    at the results, Enter. Start-menu launches are parented by explorer.exe, like
+    Win+R, but nobody has to type an exe path. If the `expect` window never shows
+    up, fall back to launch(fallback) via Win+R. Returns "start" or "run".
+    Nothing is typed unless the Start menu is really in front: otherwise the app
+    name lands in whatever had focus (VM 21 Oct: Chrome's address bar -> Google
+    search -> offline dino page)."""
+    if LAUNCH_VIA_START:
+        opened = False
+        for _ in range(2):                 # a second tap if the first didn't take
+            press("win")
+            if _start_menu_open():
+                opened = True
+                break
+            human_delay("action")
+            if _start_menu_open(0.5):      # it may have toggled shut: tap again
+                opened = True
+                break
+        if opened:
+            human_delay("action")          # Start menu slides open
+            type_human(search, typo_rate=0.02)
+            human_delay("think")           # results list fills in, find the right one
+            if _foreground_exe() in _START_EXES:
+                press("enter")
+                if expect is None or wait_for_window(expect, timeout):
+                    return "start"
+            if _foreground_exe() in _START_EXES:
+                press("escape")            # Start menu still up: close it
+                human_delay("action")
+    if fallback is None:
+        raise RuntimeError("could not open %r from the Start menu" % search)
+    launch(fallback, fallback_args)
+    return "run"
 
 # ---------- mouse ----------
 MOUSEEVENTF_MOVE, MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP = 0x1, 0x2, 0x4

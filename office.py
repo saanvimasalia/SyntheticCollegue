@@ -24,7 +24,8 @@ max_seconds (it is short, ~1 min).
 
 Rules followed (see MASTER_BUILD_PLAN section 11)
 -------------------------------------------------
-* Launch ONLY through engine.launch() (Win+R via SendInput -> explorer parent).
+* Launch ONLY through engine.open_app() / engine.launch() (Start-menu search,
+  Win+R as fallback, both via SendInput -> explorer parent).
 * No subprocess / os.startfile / Start-Process anywhere in this file.
   (Window checks use ctypes user32 only, so no extra python->child process
   events pollute the Sysmon log.)
@@ -802,9 +803,29 @@ def _force_close(appear_wait=6.0):
 
 
 def _launch_writer(extra_arg=None):
-    """P1 convention: path already quoted, args as ONE string."""
+    """P1 convention: path already quoted, args as ONE string.
+    Blank Writer/Calc open from the Start menu ("libreoffice writer", Enter), the
+    way a person does it; Win+R with the full path is only the fallback. Opening a
+    specific file (extra_arg is a path) still goes through Win+R."""
     quoted = '"%s"' % _soffice()
     args = extra_arg if extra_arg is not None else " ".join(WRITER_ARGS)
+    app = {" ".join(WRITER_ARGS): "writer", " ".join(CALC_ARGS): "calc"}.get(args)
+    if app is None:
+        engine.launch(quoted, args)
+        return
+    brand = "openoffice" if "openoffice" in _soffice().lower() else "libreoffice"
+    try:
+        engine.open_app("%s %s" % (brand, app))
+    except RuntimeError as exc:                 # Start menu never came up: nothing was typed
+        _log("Start menu not available (%s); using Win+R" % exc)
+        engine.launch(quoted, args)
+        return
+    # our own _wait sees any window (not only the foreground one) and handles the
+    # recovery/tip dialogs, so it decides whether the Start-menu launch worked
+    if _wait(WINDOW_PART if app == "writer" else CALC_PART, 40, dialogs=True):
+        _log("opened %s from the Start menu" % app)
+        return
+    _log("Start-menu launch of %s not seen; falling back to Win+R" % app)
     engine.launch(quoted, args)
 
 
@@ -867,7 +888,7 @@ def write_document(max_seconds=None, doc_type=None, raise_on_error=False, keep_o
 
     try:
         _ensure_closed()
-        _log("launching Writer via engine.launch (Win+R)")
+        _log("launching Writer (Start menu, Win+R fallback)")
         _launch_writer()
         if not _wait(WINDOW_PART, 45, dialogs=True):
             raise OfficeError("Writer window did not appear")
@@ -888,6 +909,8 @@ def write_document(max_seconds=None, doc_type=None, raise_on_error=False, keep_o
             if i > 0 and not fits(para):
                 _log("time budget: not enough left for paragraph %d; wrapping up" % (i + 1))
                 break
+            if i > 0 and random.random() < 0.25:
+                _pause(5.0, 0.5, 2.0, 12.0)           # rereads what's there / looks away
             _delay("think", 2.2, 0.35, 1.2, 6.0)      # thinking what to write
             t_ty = time.monotonic()
             rec["typos"] += _type_human(para)
@@ -1635,7 +1658,7 @@ def write_spreadsheet(max_seconds=None, sheet_type=None, raise_on_error=False):
 
     try:
         _ensure_closed()
-        _log("launching Calc via engine.launch (Win+R)")
+        _log("launching Calc (Start menu, Win+R fallback)")
         _launch_writer(" ".join(CALC_ARGS))
         if not _wait(CALC_PART, 45, dialogs=True):
             raise OfficeError("Calc window did not appear")
